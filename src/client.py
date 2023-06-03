@@ -1,90 +1,53 @@
-import socket
-import struct
-import sys
+import io
+from socket import *
+from PIL import ImageTk, Image
 import tkinter as tk
-from PIL import Image, ImageTk
-from pynput import keyboard, mouse
 
-class RemoteReceiver:
-    def __init__(self, server_addr: tuple):
-        self.root = tk.Tk()
-        self.root.title(f"{server_addr[0]}:{server_addr[1]}")
 
-        self.label = tk.Label(self.root)
-        self.label.pack()
+def main():
+    with socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) as client:
+        client.connect(("127.0.0.1", 12345))
 
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP)
-        self.sock.connect(server_addr)
+        window = tk.Tk()
+        window.title("Screen Stream")
+        #window.geometry("800x600")
 
-        self.root.withdraw()
+        image_label = tk.Label(window)
+        image_label.pack()
 
-        # Mouse event listener
-        self.mouse_listener = mouse.Listener(on_move=self.on_mouse_move, on_click=self.on_mouse_click)
-        self.mouse_listener.start()
+        def update_image():
+            try:
+                size_bytes = client.recv(4)
+                size = int.from_bytes(size_bytes, byteorder="big")
 
-        # Keyboard event listener
-        self.keyboard_listener = keyboard.Listener(on_press=self.on_key_press)
-        self.keyboard_listener.start()
+                image_bytes = b""
+                bytes_received = 0
+                while bytes_received < size:
+                    data = client.recv(size - bytes_received)
+                    if not data:
+                        break
+                    image_bytes += data
+                    bytes_received += len(data)
 
-    def close(self):
-        self.sock.shutdown(socket.SHUT_RDWR)
-        self.sock.close()
-        self.root.destroy()
+                image = Image.open(io.BytesIO(image_bytes))
+                #image = image.resize((800, 600))
 
-        sys.exit(0)
+                image_tk = ImageTk.PhotoImage(image)
 
-    def display_screenshot(self, image):
-        img_tk = ImageTk.PhotoImage(image)
-        self.label.config(image=img_tk)
-        self.label.image = img_tk
+                image_label.configure(image=image_tk)
+                image_label.image = image_tk
 
-    def run(self):
-        try:
-            self.root.deiconify()
-            while True:
-                size_bytes = self.sock.recv(4)
-                screenshot_size = struct.unpack("!I", size_bytes)[0]
+                window.after(1, update_image)
 
-                remaining_bytes = screenshot_size
-                screenshot_bytes = b""
-                while remaining_bytes > 0:
-                    received_bytes = self.sock.recv(remaining_bytes)
-                    screenshot_bytes += received_bytes
-                    remaining_bytes -= len(received_bytes)
+            except socket.error as e:
+                print(f"Error receiving image: {e}")
 
-                screenshot = Image.frombytes("RGB", (1920, 1080), screenshot_bytes)
-                self.display_screenshot(screenshot)
-                self.root.update()
-        except KeyboardInterrupt:
-            self.close()
+        update_image()
 
-    def on_mouse_move(self, x, y):
-        # Move the mouse on the receiver side
-        mouse_controller = mouse.Controller()
-        mouse_controller.position = (x, y)
+        window.mainloop()
 
-    def on_mouse_click(self, x, y, button, pressed):
-        # Perform mouse click on the receiver side
-        mouse_controller = mouse.Controller()
-        if pressed:
-            mouse_controller.press(button)
-        else:
-            mouse_controller.release(button)
+        client.shutdown(SHUT_RDWR)
 
-    def on_key_press(self, key):
-        # Press the key on the receiver side
-        keyboard_controller = keyboard.Controller()
-        try:
-            # Get the key value as a string
-            key_value = key.char
-            # Press the key
-            keyboard_controller.press(key_value)
-            # Release the key
-            keyboard_controller.release(key_value)
-        except AttributeError:
-            # If the key has no char attribute (e.g., special keys), ignore it
-            pass
 
 if __name__ == "__main__":
-    receiver = RemoteReceiver(("127.0.0.1", 12345))
-    receiver.run()
+    main()
