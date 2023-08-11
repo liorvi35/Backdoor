@@ -1,0 +1,36 @@
+def video_control() -> None:
+
+    def update_image() -> None:
+        size_bytes, _ = video_server.recvfrom(4)
+        size = int.from_bytes(size_bytes, byteorder="big")
+
+        image_bytes = b""
+        bytes_received = 0
+        while bytes_received < size:
+            data, _ = video_server.recvfrom(1400)
+            if not data:
+                break
+            image_bytes += data
+            bytes_received += len(data)
+
+        image = Image.open(io.BytesIO(image_bytes))
+        image_tk = ImageTk.PhotoImage(image)
+
+        image_label.configure(image=image_tk)
+        image_label.image = image_tk
+
+        window.after(1, update_image)
+
+
+    video_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    video_server.bind((SERVER_IP, SERVER_PORT + 1))
+
+    window = tk.Tk()
+    window.title("Video")
+
+    image_label = tk.Label(window)
+    image_label.pack()
+
+    update_image()
+
+    window.mainloop()
