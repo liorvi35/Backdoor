@@ -1,36 +1,22 @@
-def video_control() -> None:
+def mouse_control() -> None:
+    def move(x, y) -> None:
+        cmd = f"MOVE,{x},{y}".encode()
+        mouse_server.sendto(cmd, mouse_client)
 
-    def update_image() -> None:
-        size_bytes, _ = video_server.recvfrom(4)
-        size = int.from_bytes(size_bytes, byteorder="big")
+    def click(x, y, button, pressed) -> None:
+        cmd = f"CLICK,{button},{pressed}".encode()
+        mouse_server.sendto(cmd, mouse_client)
 
-        image_bytes = b""
-        bytes_received = 0
-        while bytes_received < size:
-            data, _ = video_server.recvfrom(1400)
-            if not data:
-                break
-            image_bytes += data
-            bytes_received += len(data)
+    def scroll(x, y, dx, dy) -> None:
+        cmd = f"SCROLL,{dx},{dy}".encode()
+        mouse_server.sendto(cmd, mouse_client)
 
-        image = Image.open(io.BytesIO(image_bytes))
-        image_tk = ImageTk.PhotoImage(image)
+    mouse_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    mouse_server.bind((SERVER_IP, SERVER_PORT))
+    print("Mouse bound and listening...")
 
-        image_label.configure(image=image_tk)
-        image_label.image = image_tk
+    _, mouse_client = mouse_server.recvfrom(1)
+    print("Mouse connected!")
 
-        window.after(1, update_image)
-
-
-    video_server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    video_server.bind((SERVER_IP, SERVER_PORT + 1))
-
-    window = tk.Tk()
-    window.title("Video")
-
-    image_label = tk.Label(window)
-    image_label.pack()
-
-    update_image()
-
-    window.mainloop()
+    with mouse(on_move=move, on_click=click, on_scroll=scroll) as my_mouse:
+        my_mouse.join()
