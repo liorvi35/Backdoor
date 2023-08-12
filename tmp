@@ -1,0 +1,50 @@
+import io
+from socket import *
+from PIL import Image, ImageTk
+import threading
+import tkinter as tk
+
+
+def show_data(image, label, photo_ref):
+    screenshot_tk = ImageTk.PhotoImage(image)
+    label.config(image=screenshot_tk)
+    label.image = screenshot_tk  # Store a reference to prevent garbage collection
+    photo_ref[0] = screenshot_tk  # Update the global PhotoImage reference
+
+
+def recv_data(label, photo_ref):
+    server = socket(AF_INET, SOCK_DGRAM)
+    server.bind(("127.0.0.1", 3000))
+
+    BUFFER_SIZE = 1024  # Adjust buffer size to match the client
+
+    while True:
+        buff = b""
+        while True:
+            data, _ = server.recvfrom(BUFFER_SIZE)
+            if data == b"$$$":
+                break
+            buff += data
+
+        print("Got")
+
+        screenshot_bytes = io.BytesIO(buff)
+        screenshot = Image.open(screenshot_bytes)
+
+        show_data(screenshot, label, photo_ref)
+
+    server.close()
+
+
+if __name__ == "__main__":
+    wind = tk.Tk()
+    label = tk.Label(wind)
+    label.pack()
+
+    photo_ref = [None]  # Global reference to the PhotoImage object
+
+    tid = threading.Thread(target=recv_data, args=(label, photo_ref))
+    tid.start()
+
+    wind.mainloop()  # Start the main loop of the main thread
+    tid.join()
