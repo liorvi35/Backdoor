@@ -1,7 +1,11 @@
 import socket
 import threading
+import io
+import pyautogui
 from pynput.keyboard import Controller as keyboard_ctrl, Key
 from pynput.mouse import Controller as mouse_ctrl, Button
+
+pyautogui.FAILSAFE = False
 
 SERVER_IP = "10.0.0.13"
 SERVER_PORT = 3000
@@ -85,7 +89,6 @@ def get_control_mouse() -> None:
 
 
 def get_control_keyboard() -> None:
-
     def get_press(key) -> None:
         try:
             keyboard.press(key)
@@ -110,20 +113,41 @@ def get_control_keyboard() -> None:
 
         args = cmd.split(",")
 
-        print(args)
-
         if args[0] == "PRESS":
             get_press(args[1].strip("'"))
         elif args[0] == "RELEASE":
             get_release(args[1].strip("'"))
 
 
+def send_screen() -> None:
+    screen_client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+
+    while True:
+
+        screenshot = pyautogui.screenshot()
+        screenshot_bytes = io.BytesIO()
+        screenshot.save(screenshot_bytes, format="PNG")
+        screenshot_data = screenshot_bytes.getvalue()
+
+        total_sent = 0
+        while total_sent < len(screenshot_data):
+            chunk = screenshot_data[total_sent:total_sent + 1024]
+            screen_client.sendto(chunk, (SERVER_IP, SERVER_PORT + 2))
+            total_sent += len(chunk)
+
+        screen_client.sendto(b"$$$", (SERVER_IP, SERVER_PORT + 2))
+
+
+
 if __name__ == "__main__":
     m = threading.Thread(target=get_control_mouse)
     k = threading.Thread(target=get_control_keyboard)
+    v = threading.Thread(target=send_screen)
 
     m.start()
     k.start()
+    v.start()
 
     m.join()
     k.join()
+    v.join()
